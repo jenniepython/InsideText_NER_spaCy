@@ -7,16 +7,16 @@ This application provides an easy-to-use interface for entity extraction,
 linking, and visualization.
 
 Author: Based on entity_linker.py
-Version: 1.0
+Version: 1.0 - Updated to use spaCy instead of NLTK
 """
 
 import streamlit as st
 
 # Configure Streamlit page FIRST - before any other Streamlit commands
 st.set_page_config(
-    page_title="InsideText: Linking Entities with spaCy",
-    layout="centered",  # Changed from "wide" to "centered" for mobile
-    initial_sidebar_state="collapsed"  # Changed from "expanded" to "collapsed" for mobile
+    page_title="Linking Entities with spaCy",
+    layout="centered",  
+    initial_sidebar_state="collapsed" 
 )
 
 # Authentication is REQUIRED - do not run app without proper login
@@ -48,8 +48,8 @@ try:
     if 'authentication_status' in st.session_state and st.session_state['authentication_status']:
         name = st.session_state['name']
         authenticator.logout("Logout", "sidebar")
-        st.sidebar.success(f"Welcome *{name}*!")
-        st.success(f"Successfully logged in as {name}")
+ #       st.sidebar.success(f"Welcome *{name}*!")
+ #       st.success(f"Successfully logged in as {name}")
         # Continue to app below...
     else:
         # Render login form
@@ -127,11 +127,11 @@ class EntityLinker:
     Main class for entity linking functionality.
     
     This class handles the complete pipeline from text processing to entity
-    extraction, validation, linking, and output generation using spaCy.
+    extraction, validation, linking, and output generation.
     """
     
     def __init__(self):
-        """Initialize the EntityLinker and load spaCy model."""
+        """Initialize the EntityLinker and load required spaCy model."""
         self.nlp = self._load_spacy_model()
         
         # Color scheme for different entity types in HTML output
@@ -139,102 +139,99 @@ class EntityLinker:
             'PERSON': '#BF7B69',          # F&B Red earth        
             'ORG': '#9fd2cd',             # F&B Blue ground
             'GPE': '#C4C3A2',             # F&B Cooking apple green
-            'LOC': '#EFCA89',             # F&B Yellow ground
+            'LOC': '#EFCA89',             # F&B Yellow ground. 
             'FAC': '#C3B5AC',             # F&B Elephants breath
-            'NORP': '#C4A998',            # F&B Dead salmon
-            'ADDRESS': '#CCBEAA',         # F&B Oxford stone
-            'EVENT': '#E6D7C3',          # F&B Pointing
-            'WORK_OF_ART': '#D6C9A8',    # F&B String
-            'LAW': '#CCC1A5',             # F&B French Gray
-            'LANGUAGE': '#B8B49A'         # F&B Vert de Terre
+            'GSP': '#C4A998',             # F&B Dead salmon
+            'ADDRESS': '#CCBEAA'          # F&B Oxford stone
         }
     
     def _load_spacy_model(self):
-        """Load spaCy model with proper error handling."""
+        """Load spaCy model with error handling and automatic download."""
         import spacy
         
-        try:
-            # Try to load the English model
-            nlp = spacy.load("en_core_web_sm")
-            st.success("Successfully loaded spaCy English model")
-            return nlp
-        except OSError:
+        # Try to load models in order of preference
+        models_to_try = ['en_core_web_sm', 'en_core_web_md', 'en_core_web_lg']
+        
+        for model_name in models_to_try:
             try:
-                # If small model not available, try medium
-                nlp = spacy.load("en_core_web_md")
-                st.success("Successfully loaded spaCy English medium model")
+                nlp = spacy.load(model_name)
+                st.success(f"Loaded spaCy model: {model_name}")
                 return nlp
             except OSError:
-                try:
-                    # If medium not available, try large
-                    nlp = spacy.load("en_core_web_lg")
-                    st.success("Successfully loaded spaCy English large model")
-                    return nlp
-                except OSError:
-                    # If no model available, show installation instructions
-                    st.error("spaCy English model not found!")
-                    st.markdown("""
-                    **Please install a spaCy English model:**
-                    
-                    ```bash
-                    python -m spacy download en_core_web_sm
-                    ```
-                    
-                    Or try one of these alternatives:
-                    ```bash
-                    python -m spacy download en_core_web_md
-                    python -m spacy download en_core_web_lg
-                    ```
-                    """)
-                    st.stop()
+                continue
+        
+        # If no model is available, try to download en_core_web_sm
+        st.info("No spaCy model found. Attempting to download en_core_web_sm...")
+        try:
+            import subprocess
+            import sys
+            
+            # Download the model
+            subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+            
+            # Try to load it
+            nlp = spacy.load("en_core_web_sm")
+            st.success("Successfully downloaded and loaded en_core_web_sm")
+            return nlp
+            
+        except Exception as e:
+            st.error(f"Failed to download spaCy model: {e}")
+            st.error("Please install a spaCy English model manually:")
+            st.code("python -m spacy download en_core_web_sm")
+            st.stop()
 
     def extract_entities(self, text: str):
-        """Extract named entities from text using spaCy."""
+        """Extract named entities from text using spaCy with proper validation."""
+        # Process text with spaCy
         doc = self.nlp(text)
         
         entities = []
         
-        # Extract entities from spaCy
+        # Step 1: Extract traditional named entities with validation
         for ent in doc.ents:
-            # Filter out unwanted entity types
-            if ent.label_ in ['TIME', 'DATE', 'MONEY', 'PERCENT', 'QUANTITY', 'ORDINAL', 'CARDINAL']:
+            # Filter out unwanted entity types at the spaCy label level
+            if ent.label_ in ['DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL']:
                 continue
             
-            # Map some spaCy labels to more common names
-            entity_type = self._map_entity_type(ent.label_)
+            # Map spaCy entity types to our format
+            entity_type = self._map_spacy_entity_type(ent.label_)
             
-            entities.append({
-                'text': ent.text,
-                'type': entity_type,
-                'start': ent.start_char,
-                'end': ent.end_char,
-                'spacy_label': ent.label_,
-                'confidence': getattr(ent, 'score', None)  # Some models provide confidence scores
-            })
+            # Additional filter in case mapping returns an unwanted type
+            if entity_type in ['DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL']:
+                continue
+            
+            # Validate entity using grammatical context
+            if self._is_valid_entity(ent.text, entity_type, ent):
+                entities.append({
+                    'text': ent.text,
+                    'type': entity_type,
+                    'start': ent.start_char,
+                    'end': ent.end_char,
+                    'label': ent.label_  # Keep original spaCy label for reference
+                })
         
-        # Extract addresses using regex (spaCy might miss some address patterns)
+        # Step 2: Extract addresses
         addresses = self._extract_addresses(text)
         entities.extend(addresses)
         
-        # Remove overlapping entities
+        # Step 3: Remove overlapping entities
         entities = self._remove_overlapping_entities(entities)
         
         return entities
-    
-    def _map_entity_type(self, spacy_label: str) -> str:
-        """Map spaCy entity labels to our standard types."""
+
+    def _map_spacy_entity_type(self, spacy_label: str) -> str:
+        """Map spaCy entity labels to our standardized types."""
         mapping = {
             'PERSON': 'PERSON',
-            'ORG': 'ORG',
+            'ORG': 'ORGANIZATION',
             'GPE': 'GPE',  # Geopolitical entity
-            'LOC': 'LOC',  # Location
-            'FAC': 'FAC',  # Facility
-            'NORP': 'NORP',  # Nationalities, religious groups
-            'EVENT': 'EVENT',
-            'WORK_OF_ART': 'WORK_OF_ART',
-            'LAW': 'LAW',
-            'LANGUAGE': 'LANGUAGE',
-            'PRODUCT': 'PRODUCT'
+            'LOC': 'LOCATION',
+            'FAC': 'FACILITY',
+            'NORP': 'GPE',  # Nationalities or religious or political groups -> GPE
+            'EVENT': 'LOCATION',  # Events often have location relevance
+            'WORK_OF_ART': 'ORGANIZATION',  # Often associated with organizations
+            'LAW': 'ORGANIZATION',  # Laws often associated with organizations
+            'LANGUAGE': 'GPE'  # Languages associated with places
         }
         return mapping.get(spacy_label, spacy_label)
 
@@ -275,24 +272,147 @@ class EntityLinker:
         
         return entities
 
+    def _detect_geographical_context(self, text: str, entities: List[Dict[str, Any]]) -> List[str]:
+        """
+        Detect geographical context from the text to improve geocoding accuracy.
+        
+        Args:
+            text: The full input text
+            entities: List of extracted entities
+        
+        Returns:
+            List of context strings to use for geocoding (e.g., ['UK', 'London', 'England'])
+        """
+        import re
+        
+        context_clues = []
+        text_lower = text.lower()
+        
+        # Extract major cities/countries mentioned in the text
+        major_locations = {
+            # Countries
+            'uk': ['uk', 'united kingdom', 'britain', 'great britain'],
+            'usa': ['usa', 'united states', 'america', 'us '],
+            'canada': ['canada'],
+            'australia': ['australia'],
+            'france': ['france'],
+            'germany': ['germany'],
+            'italy': ['italy'],
+            'spain': ['spain'],
+            'japan': ['japan'],
+            'china': ['china'],
+            'india': ['india'],
+            
+            # Major cities that provide strong context
+            'london': ['london'],
+            'new york': ['new york', 'nyc', 'manhattan'],
+            'paris': ['paris'],
+            'tokyo': ['tokyo'],
+            'sydney': ['sydney'],
+            'toronto': ['toronto'],
+            'berlin': ['berlin'],
+            'rome': ['rome'],
+            'madrid': ['madrid'],
+            'beijing': ['beijing'],
+            'mumbai': ['mumbai'],
+            'los angeles': ['los angeles', 'la ', ' la,'],
+            'chicago': ['chicago'],
+            'boston': ['boston'],
+            'edinburgh': ['edinburgh'],
+            'glasgow': ['glasgow'],
+            'manchester': ['manchester'],
+            'birmingham': ['birmingham'],
+            'liverpool': ['liverpool'],
+            'bristol': ['bristol'],
+            'leeds': ['leeds'],
+            'cardiff': ['cardiff'],
+            'belfast': ['belfast'],
+            'dublin': ['dublin'],
+        }
+        
+        # Check for explicit mentions
+        for location, patterns in major_locations.items():
+            for pattern in patterns:
+                if pattern in text_lower:
+                    context_clues.append(location)
+                    break
+        
+        # Extract from entities that are already identified as places
+        for entity in entities:
+            if entity['type'] in ['GPE', 'LOCATION']:
+                entity_lower = entity['text'].lower()
+                # Add major locations found in entities
+                for location, patterns in major_locations.items():
+                    if entity_lower in patterns or any(p in entity_lower for p in patterns):
+                        if location not in context_clues:
+                            context_clues.append(location)
+        
+        # Look for postal codes to infer country
+        postal_patterns = {
+            'uk': [
+                r'\b[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}\b',  # UK postcodes
+                r'\b[A-Z]{2}\d{1,2}\s*\d[A-Z]{2}\b'
+            ],
+            'usa': [
+                r'\b\d{5}(-\d{4})?\b'  # US ZIP codes
+            ],
+            'canada': [
+                r'\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b'  # Canadian postal codes
+            ]
+        }
+        
+        for country, patterns in postal_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, text):
+                    if country not in context_clues:
+                        context_clues.append(country)
+                    break
+        
+        # Prioritize context (more specific first)
+        priority_order = ['london', 'new york', 'paris', 'tokyo', 'sydney', 'uk', 'usa', 'canada', 'australia', 'france', 'germany']
+        prioritized_context = []
+        
+        for priority_location in priority_order:
+            if priority_location in context_clues:
+                prioritized_context.append(priority_location)
+        
+        # Add remaining context clues
+        for clue in context_clues:
+            if clue not in prioritized_context:
+                prioritized_context.append(clue)
+        
+        return prioritized_context[:3]  # Return top 3 context clues
+
     def get_coordinates(self, entities):
-        """Add coordinate lookup using Python geocoding, then OpenStreetMap as fallback."""
+        """Enhanced coordinate lookup with geographical context detection."""
         import requests
         import time
         
-        place_types = ['GPE', 'LOC', 'FAC', 'ORG']
+        # Detect geographical context from the full text
+        context_clues = self._detect_geographical_context(
+            st.session_state.get('processed_text', ''), 
+            entities
+        )
+        
+        if context_clues:
+            print(f"Detected geographical context: {', '.join(context_clues)}")
+        
+        place_types = ['GPE', 'LOCATION', 'FACILITY', 'ORGANIZATION', 'ADDRESS']
         
         for entity in entities:
             if entity['type'] in place_types:
                 # Skip if already has coordinates
                 if entity.get('latitude') is not None:
                     continue
+                
+                # Try geocoding with context
+                if self._try_contextual_geocoding(entity, context_clues):
+                    continue
                     
-                # Try Python geocoding libraries first
+                # Fall back to original methods
                 if self._try_python_geocoding(entity):
                     continue
                 
-                # Fall back to OpenStreetMap
                 if self._try_openstreetmap(entity):
                     continue
                     
@@ -301,14 +421,101 @@ class EntityLinker:
         
         return entities
     
-    def _try_python_geocoding(self, entity):
-        """Try Python geocoding libraries (geopy)."""
+    def _try_contextual_geocoding(self, entity, context_clues):
+        """Try geocoding with geographical context."""
+        import requests
+        import time
+        
+        if not context_clues:
+            return False
+        
+        # Create context-aware search terms
+        search_variations = [entity['text']]
+        
+        # Add context to search terms
+        for context in context_clues:
+            context_mapping = {
+                'uk': ['UK', 'United Kingdom', 'England', 'Britain'],
+                'usa': ['USA', 'United States', 'US'],
+                'canada': ['Canada'],
+                'australia': ['Australia'],
+                'france': ['France'],
+                'germany': ['Germany'],
+                'london': ['London, UK', 'London, England'],
+                'new york': ['New York, USA', 'New York, NY'],
+                'paris': ['Paris, France'],
+                'tokyo': ['Tokyo, Japan'],
+                'sydney': ['Sydney, Australia'],
+            }
+            
+            context_variants = context_mapping.get(context, [context])
+            for variant in context_variants:
+                search_variations.append(f"{entity['text']}, {variant}")
+        
+        # Remove duplicates while preserving order
+        search_variations = list(dict.fromkeys(search_variations))
+        
+        # Try geopy first with context
         try:
-            # Try geopy with multiple providers
+            from geopy.geocoders import Nominatim
+            from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+            
+            geocoder = Nominatim(user_agent="EntityLinker/1.0", timeout=10)
+            
+            for search_term in search_variations[:5]:  # Try top 5 variations
+                try:
+                    location = geocoder.geocode(search_term, timeout=10)
+                    if location:
+                        entity['latitude'] = location.latitude
+                        entity['longitude'] = location.longitude
+                        entity['location_name'] = location.address
+                        entity['geocoding_source'] = f'geopy_contextual'
+                        entity['search_term_used'] = search_term
+                        return True
+                    
+                    time.sleep(0.2)  # Rate limiting
+                except (GeocoderTimedOut, GeocoderServiceError):
+                    continue
+                    
+        except ImportError:
+            pass
+        
+        # Fall back to OpenStreetMap with context
+        for search_term in search_variations[:3]:  # Try top 3 with OSM
+            try:
+                url = "https://nominatim.openstreetmap.org/search"
+                params = {
+                    'q': search_term,
+                    'format': 'json',
+                    'limit': 1,
+                    'addressdetails': 1
+                }
+                headers = {'User-Agent': 'EntityLinker/1.0'}
+            
+                response = requests.get(url, params=params, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data:
+                        result = data[0]
+                        entity['latitude'] = float(result['lat'])
+                        entity['longitude'] = float(result['lon'])
+                        entity['location_name'] = result['display_name']
+                        entity['geocoding_source'] = f'openstreetmap_contextual'
+                        entity['search_term_used'] = search_term
+                        return True
+            
+                time.sleep(0.3)  # Rate limiting
+            except Exception:
+                continue
+        
+        return False
+    
+    def _try_python_geocoding(self, entity):
+        """Try Python geocoding libraries (geopy) - original method."""
+        try:
             from geopy.geocoders import Nominatim, ArcGIS
             from geopy.exc import GeocoderTimedOut, GeocoderServiceError
             
-            # List of geocoders to try in order
             geocoders = [
                 ('nominatim', Nominatim(user_agent="EntityLinker/1.0", timeout=10)),
                 ('arcgis', ArcGIS(timeout=10)),
@@ -316,7 +523,6 @@ class EntityLinker:
             
             for name, geocoder in geocoders:
                 try:
-                    # Try the entity name as-is first
                     location = geocoder.geocode(entity['text'], timeout=10)
                     if location:
                         entity['latitude'] = location.latitude
@@ -324,30 +530,16 @@ class EntityLinker:
                         entity['location_name'] = location.address
                         entity['geocoding_source'] = f'geopy_{name}'
                         return True
-                    
-                    # If that fails, try with country context for UK places
-                    if name == 'nominatim':
-                        for suffix in [', UK', ', England', ', Scotland', ', Wales']:
-                            location = geocoder.geocode(f"{entity['text']}{suffix}", timeout=10)
-                            if location:
-                                entity['latitude'] = location.latitude
-                                entity['longitude'] = location.longitude
-                                entity['location_name'] = location.address
-                                entity['geocoding_source'] = f'geopy_{name}_contextual'
-                                return True
                         
-                    time.sleep(0.3)  # Rate limiting between providers
+                    time.sleep(0.3)
                 except (GeocoderTimedOut, GeocoderServiceError):
                     continue
                 except Exception as e:
-                    print(f"Geocoding error for {entity['text']} with {name}: {e}")
                     continue
-                    
+                        
         except ImportError:
-            # geopy not installed, skip this method
             pass
         except Exception as e:
-            print(f"Python geocoding failed for {entity['text']}: {e}")
             pass
         
         return False
@@ -428,8 +620,131 @@ class EntityLinker:
         
         return False
 
+    def _is_valid_entity(self, entity_text: str, entity_type: str, spacy_ent) -> bool:
+        """Validate an entity using spaCy's linguistic features."""
+        # Skip very short entities
+        if len(entity_text.strip()) <= 1:
+            return False
+        
+        # Use spaCy's built-in confidence and linguistic features
+        doc = spacy_ent.doc
+        
+        # Get the token(s) for this entity
+        entity_tokens = [token for token in doc[spacy_ent.start:spacy_ent.end]]
+        
+        if not entity_tokens:
+            return True  # Default to valid if we can't analyze
+        
+        first_token = entity_tokens[0]
+        
+        # Filter out words functioning as verbs or adjectives primarily
+        if first_token.pos_ in ['VERB', 'AUX'] or (first_token.pos_ == 'ADJ' and entity_type == 'PERSON'):
+            return False
+        
+        # Special handling for sentence-start words (capitalization bias)
+        if self._is_sentence_start_spacy(first_token):
+            return self._validate_sentence_start_entity_spacy(
+                first_token, entity_type, entity_tokens
+            )
+        
+        # Additional validation for specific entity types
+        if entity_type == 'PERSON':
+            return self._validate_person_entity_spacy(entity_tokens)
+        
+        if entity_type in ['GPE', 'LOCATION', 'FACILITY']:
+            return self._validate_place_entity_spacy(entity_tokens)
+        
+        # Prefer proper nouns as they're more likely to be real entities
+        if first_token.pos_ == 'PROPN':
+            return True
+        
+        return True
+
+    def _is_sentence_start_spacy(self, token) -> bool:
+        """Check if a token is at the beginning of a sentence using spaCy."""
+        # Check if this is the first token or follows sentence-ending punctuation
+        if token.i == 0:
+            return True
+        
+        # Look back for sentence boundaries
+        for i in range(token.i - 1, -1, -1):
+            prev_token = token.doc[i]
+            if prev_token.is_sent_start or prev_token.text in ['.', '!', '?']:
+                return True
+            elif prev_token.is_alpha:  # Found a word before any punctuation
+                return False
+        
+        return True
+
+    def _validate_sentence_start_entity_spacy(self, token, entity_type: str, entity_tokens) -> bool:
+        """Validate entities that appear at sentence start using spaCy features."""
+        # Check the token's lemma and POS to see if it would naturally be a verb/adjective
+        if token.pos_ in ['VERB', 'AUX', 'ADJ'] and token.lemma_.lower() != token.text.lower():
+            return False
+        
+        # Check dependency relationships
+        if token.dep_ in ['ROOT'] and token.pos_ == 'VERB':
+            return False
+        
+        # For multi-token entities, check if the pattern suggests non-entity usage
+        if len(entity_tokens) > 1:
+            # Check if followed by tokens that suggest adjectival usage
+            next_token_idx = entity_tokens[-1].i + 1
+            if next_token_idx < len(token.doc):
+                next_token = token.doc[next_token_idx]
+                if next_token.pos_ in ['NOUN'] and entity_type == 'PERSON':
+                    return False
+        
+        return True
+
+    def _validate_person_entity_spacy(self, entity_tokens) -> bool:
+        """Additional validation for PERSON entities using spaCy."""
+        if not entity_tokens:
+            return True
+        
+        first_token = entity_tokens[0]
+        
+        # Check if followed by plural nouns (suggesting adjectival usage)
+        next_token_idx = entity_tokens[-1].i + 1
+        if next_token_idx < len(first_token.doc):
+            next_token = first_token.doc[next_token_idx]
+            if next_token.pos_ == 'NOUN' and next_token.tag_ in ['NNS', 'NNPS']:
+                return False
+        
+        # Check previous token context
+        if first_token.i > 0:
+            prev_token = first_token.doc[first_token.i - 1]
+            
+            # If preceded by modal verbs or auxiliaries, likely not a person
+            if prev_token.pos_ in ['AUX'] or prev_token.tag_ in ['MD']:
+                return False
+            
+            # If preceded by determiners and not proper noun, less likely to be person
+            if prev_token.pos_ == 'DET' and first_token.pos_ != 'PROPN':
+                return False
+        
+        return True
+
+    def _validate_place_entity_spacy(self, entity_tokens) -> bool:
+        """Additional validation for place entities using spaCy."""
+        if not entity_tokens:
+            return True
+        
+        first_token = entity_tokens[0]
+        
+        # Check for adjectival usage (e.g., "March weather")
+        next_token_idx = entity_tokens[-1].i + 1
+        if next_token_idx < len(first_token.doc):
+            next_token = first_token.doc[next_token_idx]
+            
+            # If followed by noun and not proper noun, likely adjectival
+            if next_token.pos_ == 'NOUN' and first_token.pos_ != 'PROPN':
+                return False
+        
+        return True
+
     def _extract_addresses(self, text: str):
-        """Extract address patterns that spaCy might miss."""
+        """Extract address patterns that NER might miss."""
         import re
         addresses = []
         
@@ -555,41 +870,6 @@ class EntityLinker:
                 pass
         
         return entities
-        """Add basic Britannica linking.""" 
-        import requests
-        import re
-        import time
-        
-        for entity in entities:
-            # Skip if already has Wikidata link
-            if entity.get('wikidata_url'):
-                continue
-                
-            try:
-                search_url = "https://www.britannica.com/search"
-                params = {'query': entity['text']}
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-                
-                response = requests.get(search_url, params=params, headers=headers, timeout=10)
-                if response.status_code == 200:
-                    # Look for article links
-                    pattern = r'href="(/topic/[^"]*)"[^>]*>([^<]*)</a>'
-                    matches = re.findall(pattern, response.text)
-                    
-                    for url_path, link_text in matches:
-                        if (entity['text'].lower() in link_text.lower() or 
-                            link_text.lower() in entity['text'].lower()):
-                            entity['britannica_url'] = f"https://www.britannica.com{url_path}"
-                            entity['britannica_title'] = link_text.strip()
-                            break
-                
-                time.sleep(0.3)  # Rate limiting
-            except Exception:
-                pass
-        
-        return entities
 
     def link_to_openstreetmap(self, entities):
         """Add OpenStreetMap links to addresses."""
@@ -673,13 +953,6 @@ class StreamlitEntityLinker:
         return json.dumps(linked_entities)
     
     @st.cache_data
-    def cached_link_to_wikipedia(_self, entities_json: str) -> str:
-        """Cached Wikipedia linking."""
-        import json
-        entities = json.loads(entities_json)
-        linked_entities = _self.entity_linker.link_to_wikipedia(entities)
-        return json.dumps(linked_entities)
-    @st.cache_data
     def cached_link_to_britannica(_self, entities_json: str) -> str:
         """Cached Britannica linking."""
         import json
@@ -687,29 +960,83 @@ class StreamlitEntityLinker:
         linked_entities = _self.entity_linker.link_to_britannica(entities)
         return json.dumps(linked_entities)
 
+    @st.cache_data
+    def cached_link_to_wikipedia(_self, entities_json: str) -> str:
+        """Cached Wikipedia linking."""
+        import json
+        entities = json.loads(entities_json)
+        linked_entities = _self.entity_linker.link_to_wikipedia(entities)
+        return json.dumps(linked_entities)
+
     def render_header(self):
-        """Render the application header."""
-        st.title("InsideText: Linking Entities with spaCy")
-        st.markdown("""
-        **Extract and link named entities from text to external knowledge bases**
+        """Render the application header with logo."""
+        # Display logo if it exists
+        try:
+            # Try to load and display the logo
+            logo_path = "logo.png"  # You can change this filename as needed
+            if os.path.exists(logo_path):
+                # Logo naturally aligns to the left without columns
+                st.image(logo_path, width=300)  # Adjust width as needed
+            else:
+                # If logo file doesn't exist, show a placeholder or message
+                st.info("💡 Place your logo.png file in the same directory as this app to display it here")
+        except Exception as e:
+            # If there's any error loading the logo, continue without it
+            st.warning(f"Could not load logo: {e}")        
+        # Add some spacing after logo
+        st.markdown("<br>", unsafe_allow_html=True)
         
-        This tool uses spaCy for Named Entity Recognition (NER) and links entities to:
-        - **Wikidata**: Structured knowledge base
-        - **Wikipedia**: Encyclopedia articles (fallback for entities not in Wikidata)
-        - **Britannica**: Encyclopedia articles (additional fallback)
-        - **OpenStreetMap**: Geographic coordinates and address mapping
-        - **Geocoding Services**: Coordinates for places using multiple providers (geopy, Nominatim, ArcGIS)
-        """)
+        # Main title and description
+        st.header("Linking Entities with spaCy")
+        st.markdown("**Extract and link named entities from text to external knowledge bases**")
+        
+        # Create a simple process diagram
+        st.markdown("""
+        <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border: 1px solid #E0D7C0;">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="background-color: #C4C3A2; padding: 10px; border-radius: 5px; display: inline-block; margin: 5px;">
+                     <strong>Input Text</strong>
+                </div>
+                <div style="margin: 10px 0;">⬇️</div>
+                <div style="background-color: #9fd2cd; padding: 10px; border-radius: 5px; display: inline-block; margin: 5px;">
+                     <strong>spaCy Entity Recognition</strong>
+                </div>
+                <div style="margin: 10px 0;">⬇️</div>
+                <div style="text-align: center;">
+                    <strong>Link to Knowledge Bases:</strong>
+                </div>
+                <div style="margin: 15px 0;">
+                    <div style="background-color: #EFCA89; padding: 8px; border-radius: 5px; display: inline-block; margin: 3px; font-size: 0.9em;">
+                         <strong>Wikidata</strong><br><small>Structured knowledge</small>
+                    </div>
+                    <div style="background-color: #C3B5AC; padding: 8px; border-radius: 5px; display: inline-block; margin: 3px; font-size: 0.9em;">
+                        <strong>Wikipedia/Britannica</strong><br><small>Encyclopedia articles</small>
+                    </div>
+                    <div style="background-color: #BF7B69; padding: 8px; border-radius: 5px; display: inline-block; margin: 3px; font-size: 0.9em;">
+                         <strong>Geocoding</strong><br><small>Coordinates & locations</small>
+                    </div>
+                </div>
+                <div style="margin: 10px 0;">⬇️</div>
+                <div style="text-align: center;">
+                    <strong>Output Formats:</strong>
+                </div>
+                <div style="margin: 15px 0;">
+                    <div style="background-color: #E8E1D4; padding: 8px; border-radius: 5px; display: inline-block; margin: 3px; font-size: 0.9em; border: 2px solid #EFCA89;">
+                         <strong>JSON-LD Export</strong><br><small>Structured data format</small>
+                    </div>
+                    <div style="background-color: #E8E1D4; padding: 8px; border-radius: 5px; display: inline-block; margin: 3px; font-size: 0.9em; border: 2px solid #C3B5AC;">
+                         <strong>HTML Export</strong><br><small>Portable web format</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     def render_sidebar(self):
         """Render the sidebar with minimal information."""
         # Entity linking information
         st.sidebar.subheader("Entity Linking & Geocoding")
         st.sidebar.info("Entities are linked to Wikidata first, then Wikipedia, then Britannica as fallbacks. Places and addresses are geocoded using multiple services for accurate coordinates.")
-        
-        # spaCy model info
-        st.sidebar.subheader("spaCy Model")
-        st.sidebar.info("Using spaCy's English language model for accurate entity recognition. Supports more entity types than NLTK including events, works of art, and languages.")
 
     def render_input_section(self):
         """Render the text input section."""
@@ -789,7 +1116,7 @@ class StreamlitEntityLinker:
                 status_text = st.empty()
                 
                 # Step 1: Extract entities (cached)
-                status_text.text("Extracting entities with spaCy...")
+                status_text.text("Extracting entities...")
                 progress_bar.progress(25)
                 entities = self.cached_extract_entities(text)
                 
@@ -818,7 +1145,7 @@ class StreamlitEntityLinker:
                 status_text.text("Getting coordinates...")
                 progress_bar.progress(85)
                 # Geocode all place entities more aggressively
-                place_entities = [e for e in entities if e['type'] in ['GPE', 'LOC', 'FAC', 'ORG']]
+                place_entities = [e for e in entities if e['type'] in ['GPE', 'LOCATION', 'FACILITY', 'ORGANIZATION']]
                 
                 if place_entities:
                     try:
@@ -884,7 +1211,7 @@ class StreamlitEntityLinker:
         # Start with escaped text
         highlighted = html_module.escape(text)
         
-        # Color scheme
+        # Color scheme (updated for spaCy entity types)
         colors = {
             'PERSON': '#BF7B69',          # F&B Red earth        
             'ORGANIZATION': '#9fd2cd',    # F&B Blue ground
@@ -899,8 +1226,9 @@ class StreamlitEntityLinker:
         for entity in sorted_entities:
             # Highlight entities that have links OR coordinates
             has_links = (entity.get('britannica_url') or 
-                        entity.get('wikidata_url') or 
-                        entity.get('openstreetmap_url'))
+                         entity.get('wikidata_url') or 
+                         entity.get('wikipedia_url') or     
+                         entity.get('openstreetmap_url'))
             has_coordinates = entity.get('latitude') is not None
             
             if not (has_links or has_coordinates):
@@ -929,6 +1257,9 @@ class StreamlitEntityLinker:
                 url = html_module.escape(entity["wikidata_url"])
                 replacement = f'<a href="{url}" style="background-color: {color}; padding: 2px 4px; border-radius: 3px; text-decoration: none; color: black;" target="_blank" title="{tooltip}">{escaped_entity_text}</a>'
             elif entity.get('britannica_url'):
+                url = html_module.escape(entity["britannica_url"])
+                replacement = f'<a href="{url}" style="background-color: {color}; padding: 2px 4px; border-radius: 3px; text-decoration: none; color: black;" target="_blank" title="{tooltip}">{escaped_entity_text}</a>'
+            elif entity.get('openstreetmap_url'):
                 url = html_module.escape(entity["openstreetmap_url"])
                 replacement = f'<a href="{url}" style="background-color: {color}; padding: 2px 4px; border-radius: 3px; text-decoration: none; color: black;" target="_blank" title="{tooltip}">{escaped_entity_text}</a>'
             else:
@@ -1167,13 +1498,13 @@ class StreamlitEntityLinker:
         st.markdown("""
         <style>
         .stApp {
-            background-color: #F0E9D2 !important;
+            background-color: #F5F0DC !important;
         }
         .main .block-container {
-            background-color: #F0E9D2 !important;
+            background-color: #F5F0DC !important;
         }
         .stSidebar {
-            background-color: #F0E9D2 !important;
+            background-color: #F5F0DC !important;
         }
         .stSelectbox > div > div {
             background-color: white !important;
