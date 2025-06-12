@@ -5,6 +5,9 @@ streamlit-authenticator>=0.2.3
 # NLP and Entity Recognition
 spacy>=3.4.0,<4.0.0
 
+# spaCy English model - required for Streamlit Cloud
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+
 # Data manipulation and analysis
 pandas>=1.5.0
 numpy>=1.21.0
@@ -20,12 +23,6 @@ PyYAML>=6.0
 
 # Geocoding services
 geopy>=2.3.0
-
-# Optional: Additional spaCy language models
-# Note: These need to be installed separately with:
-# python -m spacy download en_core_web_sm
-# python -m spacy download en_core_web_md
-# python -m spacy download en_core_web_lg
 
 # Authentication and security
 bcrypt>=4.0.0
