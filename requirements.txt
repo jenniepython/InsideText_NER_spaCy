@@ -4,35 +4,35 @@ streamlit-authenticator>=0.2.3
 
 # NLP and Entity Recognition
 spacy>=3.4.0,<4.0.0
-
-# spaCy English model - required for Streamlit Cloud
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+# spaCy English model - install with: python -m spacy download en_core_web_sm
+# For Streamlit Cloud, you can use the direct wheel URL below:
+# https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
 # Data manipulation and analysis
-pandas>=1.5.0
-numpy>=1.21.0
+pandas>=1.5.0,<3.0.0
+numpy>=1.21.0,<2.0.0
 
 # Plotting and visualization
-plotly>=5.0.0
+plotly>=5.0.0,<6.0.0
 
 # HTTP requests for API calls
-requests>=2.28.0
+requests>=2.28.0,<3.0.0
 
 # YAML configuration file handling
-PyYAML>=6.0
+PyYAML>=6.0,<7.0.0
 
 # Geocoding services
-geopy>=2.3.0
+geopy>=2.3.0,<3.0.0
 
-# Authentication and security
+# Authentication and security (these are dependencies of streamlit-authenticator)
 bcrypt>=4.0.0
 PyJWT>=2.6.0
 
-# Additional utilities that might be needed
+# Additional utilities
 python-dateutil>=2.8.0
 pytz>=2022.1
 
-# For better performance (optional)
-# These can help with faster processing but aren't strictly required
+# For better performance (optional but recommended)
+# Uncomment these for faster processing:
 # numba>=0.56.0
 # scipy>=1.9.0
