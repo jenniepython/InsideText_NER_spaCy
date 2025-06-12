@@ -14,7 +14,7 @@ import streamlit as st
 
 # Configure Streamlit page FIRST - before any other Streamlit commands
 st.set_page_config(
-    page_title="InsideText: Linking Entities with NLTK",
+    page_title="InsideText: Linking Entities with spaCy",
     layout="centered",  # Changed from "wide" to "centered" for mobile
     initial_sidebar_state="collapsed"  # Changed from "expanded" to "collapsed" for mobile
 )
@@ -789,7 +789,7 @@ class StreamlitEntityLinker:
                 status_text = st.empty()
                 
                 # Step 1: Extract entities (cached)
-                status_text.text("Extracting entities...")
+                status_text.text("Extracting entities with spaCy...")
                 progress_bar.progress(25)
                 entities = self.cached_extract_entities(text)
                 
@@ -818,7 +818,7 @@ class StreamlitEntityLinker:
                 status_text.text("Getting coordinates...")
                 progress_bar.progress(85)
                 # Geocode all place entities more aggressively
-                place_entities = [e for e in entities if e['type'] in ['GPE', 'LOCATION', 'FACILITY', 'ORGANIZATION']]
+                place_entities = [e for e in entities if e['type'] in ['GPE', 'LOC', 'FAC', 'ORG']]
                 
                 if place_entities:
                     try:
