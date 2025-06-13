@@ -987,7 +987,7 @@ class StreamlitEntityLinker:
         st.markdown("<br>", unsafe_allow_html=True)
         
         # Main title and description
-        st.header("Linking Entities with spaCy")
+        st.header("From Text to Linked Data using spaCy")
         st.markdown("**Extract and link named entities from text to external knowledge bases**")
         
         # Create a simple process diagram
