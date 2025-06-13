@@ -155,7 +155,7 @@ class EntityLinker:
         for model_name in models_to_try:
             try:
                 nlp = spacy.load(model_name)
-                st.success(f"Loaded spaCy model: {model_name}")
+#                st.success(f"Loaded spaCy model: {model_name}")
                 return nlp
             except OSError:
                 continue
