@@ -4,7 +4,7 @@ streamlit-authenticator>=0.2.3
 
 # NLP and Entity Recognition
 spacy==3.8.7
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.5.0/en_core_web_sm-3.5.0.tar.gz
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0.tar.gz
 
 # Data manipulation and analysis
 pandas>=1.5.0,<3.0.0
